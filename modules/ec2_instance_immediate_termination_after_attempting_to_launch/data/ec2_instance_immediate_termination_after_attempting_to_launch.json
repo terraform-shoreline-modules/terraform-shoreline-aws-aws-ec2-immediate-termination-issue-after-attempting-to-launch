@@ -1,0 +1,154 @@
+{
+  "name": "ec2_instance_immediate_termination_after_attempting_to_launch",
+  "description": "This incident type refers to the immediate termination of an EC2 instance after attempting to launch it. There are various reasons why this can occur, such as exceeding EBS volume limits, corrupted EBS snapshots, encrypted root EBS volumes without proper permissions, missing parts in instance store-backed AMIs, among others. The solution to this incident type depends on the termination reason, and it may involve deleting unused volumes or ensuring proper permissions to access AWS KMS keys.",
+  "params": [
+    {
+      "name": "SNAPSHOT_ID",
+      "value": ""
+    },
+    {
+      "name": "INSTANCE_ID",
+      "value": ""
+    },
+    {
+      "name": "IMAGE_ID",
+      "value": ""
+    },
+    {
+      "name": "VOLUME_ID",
+      "value": ""
+    },
+    {
+      "name": "GRANTEE_PRINCIPAL",
+      "value": ""
+    },
+    {
+      "name": "HOST_NAME",
+      "value": ""
+    },
+    {
+      "name": "K8S_CLUSTER_NAME",
+      "value": ""
+    },
+    {
+      "name": "NAMESPACE",
+      "value": ""
+    }
+  ],
+  "cells": [
+    {
+      "name": "cell_1",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## EC2 instance immediate termination after attempting to launch.\nThis incident type refers to the immediate termination of an EC2 instance after attempting to launch it. There are various reasons why this can occur, such as exceeding EBS volume limits, corrupted EBS snapshots, encrypted root EBS volumes without proper permissions, missing parts in instance store-backed AMIs, among others. The solution to this incident type depends on the termination reason, and it may involve deleting unused volumes or ensuring proper permissions to access AWS KMS keys."
+    },
+    {
+      "name": "cell_2",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Get the instance ID of the terminated instance"
+    },
+    {
+      "name": "cell_3",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `aws ec2 describe-instances --filters Name=instance-state-name,Values=terminated --query 'Reservations[*].Instances[*].InstanceId' --output text`"
+    },
+    {
+      "name": "cell_4",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check if the instance exceeded EBS volume limits"
+    },
+    {
+      "name": "cell_5",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `aws ec2 describe-volumes --filters Name=attachment.instance-id,Values=${INSTANCE_ID} --query 'Volumes[*].{ID:VolumeId,Size:Size,State:State}' --output table`"
+    },
+    {
+      "name": "cell_6",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check if an EBS snapshot is corrupted"
+    },
+    {
+      "name": "cell_7",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `aws ec2 describe-snapshots --snapshot-ids ${SNAPSHOT_ID}`"
+    },
+    {
+      "name": "cell_8",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check if the root EBS volume is encrypted"
+    },
+    {
+      "name": "cell_9",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `aws ec2 describe-volumes --volume-ids ${VOLUME_ID} --query 'Volumes[0].Encrypted' --output text`"
+    },
+    {
+      "name": "cell_10",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check if a snapshot specified in the block device mapping for the AMI is encrypted"
+    },
+    {
+      "name": "cell_11",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `aws ec2 describe-images --image-ids ${IMAGE_ID} --query 'Images[*].BlockDeviceMappings[*].Ebs.Encrypted'`"
+    },
+    {
+      "name": "cell_12",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check if the instance store-backed AMI is missing a required part"
+    },
+    {
+      "name": "cell_13",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `aws ec2 describe-images --image-ids ${IMAGE_ID} --query 'Images[*].ImageLocation'`"
+    },
+    {
+      "name": "cell_14",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Get the termination reason of the instance"
+    },
+    {
+      "name": "cell_15",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `aws ec2 describe-instances --instance-ids ${INSTANCE_ID} --query 'Reservations[*].Instances[*].StateReason.Message'`"
+    },
+    {
+      "name": "cell_16",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Delete the unused volumes to free up space if EBS volume limits are exceeded."
+    },
+    {
+      "name": "cell_17",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "host | host_name=$HOST_NAME | invoke_ec2_delete_unused_volumes($INSTANCE_ID)"
+    },
+    {
+      "name": "cell_18",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Request the access to the KMS key if the root EBS volume is encrypted and the user does not have permissions to access the KMS key for decryption."
+    },
+    {
+      "name": "cell_19",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "host | host_name=$HOST_NAME | invoke_change_volume_encryption($INSTANCE_ID, $VOLUME_ID, $GRANTEE_PRINCIPAL)"
+    }
+  ]
+}
